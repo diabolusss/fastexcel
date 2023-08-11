@@ -15,14 +15,21 @@
  */
 package org.dhatim.fastexcel.reader;
 
-import javax.xml.stream.XMLStreamException;
+import static org.dhatim.fastexcel.reader.DefaultXMLInputFactory.factory;
+
 import java.io.InputStream;
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+import java.util.Spliterator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static org.dhatim.fastexcel.reader.DefaultXMLInputFactory.factory;
+import javax.xml.stream.XMLStreamException;
 
 class RowSpliterator implements Spliterator<Row> {
 
@@ -47,7 +54,8 @@ class RowSpliterator implements Spliterator<Row> {
                 action.accept(next());
                 return true;
             } else {
-                return false;
+            	if (!workbook.getLinkIdToLinkString().isEmpty()) { nextHyperlink(); } //TODO 2023-08-11 pass boolean or somehow get info about the need to (skip) call
+            	return false;
             }
         } catch (XMLStreamException e) {
             throw new ExcelReaderException(e);
@@ -77,7 +85,6 @@ class RowSpliterator implements Spliterator<Row> {
         }
     }
 
-
     private Row next() throws XMLStreamException {
         if (!"row".equals(r.getLocalName())) {
             throw new NoSuchElementException();
@@ -100,6 +107,36 @@ class RowSpliterator implements Spliterator<Row> {
         }
         rowCapacity = Math.max(rowCapacity, cells.size());
         return new Row(rowIndex, physicalCellCount, cells);
+    }
+
+    /**
+     * Try to map correct sheet {@link CellAddress}'es in one go.
+     *  If {@link ReadableWorkbook#getLinkIdToLinkString()} map is empty, then sheet hyperlinks won't be read.
+     *
+     * NB Should be called only after populating map with hyperlink relation ids (and uri's) {@link OPCPackage#readWorkbookHyperlinkIds(String)}
+     *     as this part contains only display text and mapping to cell.
+     * @throws XMLStreamException
+     */
+    private void nextHyperlink() throws XMLStreamException {
+    	if (workbook.getLinkIdToLinkString().isEmpty()) { return; }
+
+    	final int currentSheetIdx = (workbook.getCurrReadableTab()+1);
+        r.forEach("hyperlink", "hyperlinks", new Consumer<SimpleXmlReader>() {
+
+			@Override
+			public void accept(SimpleXmlReader sxr) {
+		        if (!"hyperlink".equals(sxr.getLocalName())) { return; }
+
+				String cellAddr = sxr.getAttribute("ref");
+		        String hyperId = sxr.getAttribute("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id");
+		      //String display = sxr.getAttribute("display");
+		      //String location = sxr.getAttribute("location"); //sheet crosslinks (no _rels)
+		        String hyperlink = workbook.getLinkIdToLinkString().remove(currentSheetIdx+hyperId);
+
+		        //update key with sheet cell address in format: sheetId(starting from 1) + CellAddress
+		        workbook.getLinkIdToLinkString().put(currentSheetIdx+cellAddr, hyperlink);
+			}
+		});
     }
 
     private Cell parseCell() throws XMLStreamException {

@@ -35,13 +35,14 @@ public class ReadableWorkbook implements Closeable {
     private boolean date1904;
     private final List<Sheet> sheets = new ArrayList<>();
     private Integer activeTab;
+    private int currReadableTab = 0;
 
     public ReadableWorkbook(File inputFile) throws IOException {
         this(OPCPackage.open(inputFile), ReadingOptions.DEFAULT_READING_OPTIONS);
     }
 
     public ReadableWorkbook(File inputFile, ReadingOptions readingOptions) throws IOException {
-        this(OPCPackage.open(inputFile, readingOptions.isWithCellFormat()), readingOptions);
+        this(OPCPackage.open(inputFile, readingOptions.isWithCellFormat(), readingOptions.isWithHyperlinks()), readingOptions);
     }
 
     /**
@@ -57,7 +58,7 @@ public class ReadableWorkbook implements Closeable {
      * (but will not uncompress it in memory)
      */
     public ReadableWorkbook(InputStream inputStream, ReadingOptions readingOptions) throws IOException {
-        this(OPCPackage.open(inputStream, readingOptions.isWithCellFormat()), readingOptions);
+        this(OPCPackage.open(inputStream, readingOptions.isWithCellFormat(), readingOptions.isWithHyperlinks()), readingOptions);
     }
 
     private ReadableWorkbook(OPCPackage pkg, ReadingOptions readingOptions) throws IOException {
@@ -108,7 +109,14 @@ public class ReadableWorkbook implements Closeable {
         return getSheet(activeTab);
     }
 
-    private void readWorkbook(SimpleXmlReader r) throws XMLStreamException {
+    /**
+     * @return index of tab that is currently read (zero-based numbering)
+     */
+    public int getCurrReadableTab() {
+		return currReadableTab;
+	}
+
+	private void readWorkbook(SimpleXmlReader r) throws XMLStreamException {
         while (r.goTo(() -> r.isStartElement("sheets") || r.isStartElement("workbookPr") ||
             r.isStartElement("workbookView") || r.isEndElement("workbook"))) {
             if ("workbookView".equals(r.getLocalName())) {
@@ -144,6 +152,7 @@ public class ReadableWorkbook implements Closeable {
 
     Stream<Row> openStream(Sheet sheet) throws IOException {
         try {
+        	this.currReadableTab = sheet.getIndex();
             InputStream inputStream = pkg.getSheetContent(sheet);
             Stream<Row> stream = StreamSupport.stream(new RowSpliterator(this, inputStream), false);
             return stream.onClose(asUncheckedRunnable(inputStream));
@@ -158,6 +167,13 @@ public class ReadableWorkbook implements Closeable {
 
     public Map<String, String> getNumFmtIdToFormat() {
         return pkg.getFmtIdToFmtString();
+    }
+
+    /**
+     * @see OPCPackage#getLinkIdToLinkString()
+     */
+    public Map<String, String> getLinkIdToLinkString() {
+        return pkg.getLinkIdToLinkString();
     }
 
     SST getSharedStringsTable() {

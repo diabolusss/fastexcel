@@ -120,7 +120,7 @@ class FastExcelReaderTest {
             "/xlsx/ErrorTypes.xlsx",
             "/xlsx/formula_stress_test.xlsx",
             "/xlsx/formulae_test_simple.xlsx",
-            "/xlsx/hyperlink_no_rels.xlsx",
+            "/xlsx/hyperlink_no_rels_withFormatting_40cells.xlsx",
             "/xlsx/hyperlink_stress_test_2011.xlsx",
             "/xlsx/interview.xlsx", "/xlsx/issue.xlsx",
             // "/xlsx/large_strings.xlsx",
